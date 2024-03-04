@@ -1,0 +1,40 @@
+/*
+Things to add:
+Background image while game is being played
+Background image if game is lost (confetti)
+Background image if game is won (man gloats and crowd leaves dissapointed) 
+ */
+
+ body {
+    font-family: Arial, sans-serif;
+    text-align: center;
+}
+
+.container {
+    margin-top: 50px;
+}
+
+.hangman {
+    margin: 20px auto;
+}
+
+.word {
+    margin: 20px auto;
+    font-size: 24px;
+}
+
+.letters {
+    margin: 20px auto;
+}
+
+.letters button {
+    font-size: 18px;
+    padding: 5px 10px;
+    margin: 5px;
+    cursor: pointer;
+}
+
+.message {
+    margin-top: 20px;
+    font-size: 18px;
+}
