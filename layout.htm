@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en"> 
+    <head>
+        <!-- element contains meta information of an HTML page
+        include the external CSS link
+        title for the HTML page (displayed in browers title bar or on the tab) -->
+        <meta charset="UFT-8">
+        <meta name="viewport" content="width=device-width, inital-scale=1.0"
+        <title>Hangman Game</title>
+        <link rel="stylesheet" href="styles.css">
+    </head>
+    <body>
+        <!-- Handle basic display stuff here such as:
+        Headers and paragraphs
+        Hangman image (noose and background image from CSS external file)
+        Display the word with hidden letters what does <span> mean
+        Display the alphabet letters for the user to guess
+        Game messages (i.e. new game and game over?) 
+        DO THIS SECTION AFTER FUNCTIONS ARE IMPLEMENTED-->
+        <div class="container">
+          <h1>Hangman Game</h1>
+            <div class="hangman">
+                <!-- Display hangman image here -->
+                <img id="hangmanImage" src="" alt="Hangman Image">
+            </div>
+            <div class="word">
+                <!-- Display the word with hidden letters -->
+                <span id="wordDisplay"></span>
+            </div>
+            <div class="letters">
+                <!-- Display alphabet buttons for player to guess -->
+                <!-- Example: <button onclick="guessLetter('A')">A</button>, <button onclick="guessLetter('B')">B</button>, ... -->
+            </div>
+            <div class="message">
+                <!-- Display game messages here -->
+                <p id="gameMessage"></p>
+            </div>
+            <button onclick="connectSerial()">Connect to Serial Port</button>
+        </div>
+        <script>
+            // Game Logic and Serial communication functions
+            // array to hold English words
+            let words = [];
+
+            // Initialize hangman image count 
+            let hangmanImageCount = 0;
+
+            //  Function to initialize game
+            function intiGame() {
+            //    reset hangman image count
+            hangmanImageCount = 0;
+            //    Display hangman image
+            
+            //    Generate random word
+            //    display word with hidden letters
+            //    clear game message
+          }
+
+            // Function to read words from text file (async because reading from file takes some time. js can execute other code while waiting for this to finish)
+            async function ReadFromFile() {
+            try {
+                const response = await fetch('EnglishWords.txt');
+                const text = await response.text();
+                const words = text.split('\n');
+                const WordsUsed = words.filter(word => word.length <= 16);
+            } catch (error) {
+                console.error("Error reading words from file.", error);
+            }
+          }
+
+           // Function to generate random word (not exceeding 16 characters)
+            function getRandomWord() {
+
+            }
+
+
+          //  Function to check/handle player guess
+          function handlePlayerGuess(guessedLetter) {
+            // check if letter is within the word 
+            //     update word display and hangman image accordingly
+            //         update word display with correct guesss
+            //         incorrect guess, increment hangman image count
+            //         display next hangman image
+            //     check if game is over (all hangman images displayed)  (send this status out (port)) (call the )
+          }
+
+          // function that handles game continuation
+          function handleGameContinuation() {
+              
+          }
+  
+          //  Function to connect to serial port
+          async function connectSerial(/*three parameters*/) {
+                // Request access to the serial port
+                // Configure serial port parameters
+                // Event listener for reading data
+                // Write data to the serial port
+          }
+
+          // Function to check if the game has ended and determine the outcome
+          function checkGameOutcome() {
+              // The player successfully guessed the word
+              // The player ran out of attempts without guessing the word
+          }
+
+          // Function to display the final score after the game is over
+          function displayFinalScore() {
+            // Example: Display the final score on the GUI
+            // Assuming there's an element with id 'finalScoreDisplay' to display the final score
+          }
+
+          //  Initialize game when the page loads
+          window.onload = function() {
+            ReadFromFile().then(intiGame);
+          };
+
+             
+        </script> 
+    </body>
+</html>
+
