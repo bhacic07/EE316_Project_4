@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hangman Game</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <h1>Hangman Game</h1>
+        <div class="hangman">
+            <!-- Display hangman image here -->
+            <img id="hangmanImage" src="" alt="Hangman Image">
+        </div>
+        <div class="word">
+            <!-- Display the word with hidden letters -->
+            <span id="wordDisplay"></span>
+        </div>
+        <div class="letters">
+            <!-- Display alphabet buttons for player to guess -->
+            <!-- Example: <button onclick="guessLetter('A')">A</button>, <button onclick="guessLetter('B')">B</button>, ... -->
+        </div>
+        <div class="message">
+            <!-- Display game messages here -->
+            <p id="gameMessage"></p>
+        </div>
+        <button onclick="connectSerial()">Connect to Serial Port</button>
+    </div>
+
+    <script>
+        // Array to hold English words
+        let words = [];
+
+        // Initialize hangman image count
+        let hangmanImageCount = 0;
+
+        // Function to read words from text file
+        async function readWordsFromFile() {
+            try {
+                const response = await fetch('words.txt'); // Assuming your text file is named 'words.txt'
+                const text = await response.text();
+                words = text.split('\n');
+            } catch (error) {
+                console.error("Error reading words from file:", error);
+            }
+        }
+
+        // Function to generate random word
+        function getRandomWord() {
+            return words[Math.floor(Math.random() * words.length)];
+        }
+
+        // Function to initialize game
+        function initGame() {
+            // Reset hangman image count
+            hangmanImageCount = 0;
+
+            // Display hangman image
+            document.getElementById('hangmanImage').src = `hangman${hangmanImageCount}.png`; // Assuming your images are named 'hangman0.png', 'hangman1.png', etc.
+
+            // Generate random word
+            const word = getRandomWord();
+
+            // Display word with hidden letters
+            const wordDisplay = word.replace(/./g, '_ ');
+            document.getElementById('wordDisplay').textContent = wordDisplay;
+
+            // Clear game message
+            document.getElementById('gameMessage').textContent = '';
+        }
+
+        // Function to check player guess
+        function checkGuess(letter) {
+            const word = getRandomWord();
+            // Implement your logic to check if 'letter' is in the word
+            // Update word display and hangman image accordingly
+            // Example:
+            if (word.includes(letter)) {
+                // Update word display with correctly guessed letter(s)
+                // Example:
+                // document.getElementById('wordDisplay').textContent = updatedWordDisplay;
+            } else {
+                // Incorrect guess, increment hangman image count
+                hangmanImageCount++;
+                // Display next hangman image
+                document.getElementById('hangmanImage').src = `hangman${hangmanImageCount}.png`;
+
+                // Check if game is over (all hangman images displayed)
+                if (hangmanImageCount === maxHangmanImages) {
+                    // Game over
+                    document.getElementById('gameMessage').textContent = 'Game Over';
+                }
+            }
+        }
+
+        // Function to handle player guess
+        function guessLetter(letter) {
+            // Implement your logic to handle player guess
+            // Example:
+            // Check if letter has already been guessed
+            // if (guessedLetters.includes(letter)) {
+            //     // Letter already guessed, display message to player
+            //     document.getElementById('gameMessage').textContent = 'Letter already guessed!';
+            // } else {
+            //     // Letter not yet guessed, check if it's in the word
+            //     checkGuess(letter);
+            //     // Add letter to list of guessed letters
+            //     guessedLetters.push(letter);
+            // }
+        }
+
+        // Function to connect to serial port
+        async function connectSerial() {
+            try {
+                // Request access to the serial port
+                const port = await navigator.serial.requestPort();
+                
+                // Configure serial port parameters
+                await port.open({ baudRate: 9600, parity: 'none', dataBits: 8, stopBits: 1 });
+
+                // Event listener for reading data
+                port.readableStream.getReader().read().then(({ value, done }) => {
+                    if (!done) {
+                        // Handle received data
+                        console.log(value);
+                        // Implement logic for handling received data from FPGA
+                    }
+                });
+
+                // Example: Write data to the serial port
+                const data = new TextEncoder().encode("Hello from the Hangman game!");
+                await port.write(data);
+            } catch (error) {
+                console.error("Error accessing serial port:", error);
+            }
+        }
+        // Function to read words from a text file
+async function readWordsFromFile() {
+    try {
+        const response = await fetch('words.txt'); // Replace 'words.txt' with the path to your text file
+        const text = await response.text();
+        const words = text.split('\n');
+        return words.filter(word => word.length <= 16); // Filter out words longer than 16 characters
+    } catch (error) {
+        console.error("Error reading words from file:", error);
+        return []; // Return an empty array if there's an error
+    }
+}
+
+// Function to select a random word from the list of words
+function getRandomWord(words) {
+    return words[Math.floor(Math.random() * words.length)];
+}
+
+// Example usage
+readWordsFromFile().then(words => {
+    if (words.length > 0) {
+        const randomWord = getRandomWord(words);
+        console.log("Random word (no more than 16 characters):", randomWord);
+    } else {
+        console.log("No valid words found in the text file.");
+    }
+});
+
+
+        // Initialize game when the page loads
+        window.onload = function() {
+            readWordsFromFile().then(initGame);
+        };
+    </script>
+</body>
+</html>
