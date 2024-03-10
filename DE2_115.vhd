@@ -138,11 +138,16 @@ component top_level is
       clk        : IN  STD_LOGIC;                     --system clock input
       ps2_clk    : IN  STD_LOGIC;                     --clock signal from PS2 keyboard
       ps2_data   : IN  STD_LOGIC;                     --data signal from PS2 keyboard
-      ascii_new  : OUT STD_LOGIC;                     --output flag indicating new ASCII value
       ascii_code : OUT STD_LOGIC_VECTOR(6 DOWNTO 0); --ASCII value
+		i_RX_Serial : IN  STD_LOGIC; 
 		o_TX_Active : out std_logic;
       o_TX_Serial : out std_logic;
-      o_TX_Done   : out std_logic
+      o_TX_Done   : out std_logic; 
+		oSDA        : INOUT STD_LOGIC;
+		oSCL        : INOUT STD_LOGIC;
+		ascii       : OUT STD_LOGIC_VECTOR(7 downto 0);
+		oLCDSDA     : INOUT STD_LOGIC;  
+      oLCDSCL     : INOUT STD_LOGIC  
 		);
 end component top_level;
 
@@ -155,11 +160,16 @@ Inst_top_level: top_level
 	   clk           => CLOCK_50,
       ps2_clk      => GPIO(35),
       ps2_data     => GPIO(34),
-      ascii_new    => UART_TXD,
-      ascii_code   => HEX0(6 downto 0), 
+      ascii_code   => open, 
+		i_RX_Serial  => GPIO(1),
 		o_TX_Active => LEDR(0),
 		o_TX_Serial => GPIO(0),
-		o_TX_Done   => LEDG(0)
+		o_TX_Done   => LEDG(0), 
+		oSDA        => GPIO(2), 
+		oSCL        => GPIO(3),
+		ascii       => LEDR(17 downto 10),
+		oLCDSDA     => GPIO(12), 
+      oLCDSCL     => GPIO(13)
 		);
 
 END structural;

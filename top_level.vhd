@@ -9,29 +9,38 @@ ENTITY top_level IS
       clk        : IN  STD_LOGIC;                     --system clock input
       ps2_clk    : IN  STD_LOGIC;                     --clock signal from PS2 keyboard
       ps2_data   : IN  STD_LOGIC;                     --data signal from PS2 keyboard
-      ascii_new  : INOUT STD_LOGIC;                     --output flag indicating new ASCII value
       ascii_code : OUT STD_LOGIC_VECTOR(6 DOWNTO 0); --ASCII value
+		i_RX_Serial : IN  STD_LOGIC; 
+		ascii       : buffer STD_LOGIC_VECTOR(7 downto 0);
 		o_TX_Active : out std_logic;
       o_TX_Serial : out std_logic;
-      o_TX_Done   : out std_logic
+      o_TX_Done   : out std_logic; 
+		oSDA        : INOUT STD_LOGIC;
+		oSCL        : INOUT STD_LOGIC;
+		oLCDSDA     : INOUT STD_LOGIC;  
+      oLCDSCL     : INOUT STD_LOGIC   
     );
 END top_level;
 
 ARCHITECTURE behavior OF top_level IS
   TYPE machine IS(ready, new_code, translate, output);              --needed states
   SIGNAL state             : machine;                               --state machine
+  SIGNAL ascii_new                : STD_LOGIC;                     --output flag indicating new ASCII value
   SIGNAL ps2_code_new      : STD_LOGIC;                             --new PS2 code flag from ps2_keyboard component
   SIGNAL ps2_code          : STD_LOGIC_VECTOR(7 DOWNTO 0);          --PS2 code input form ps2_keyboard component
   SIGNAL prev_ps2_code_new : STD_LOGIC := '1';                      --value of ps2_code_new flag on previous clock
   SIGNAL break             : STD_LOGIC := '0';                      --'1' for break code, '0' for make code
   SIGNAL e0_code           : STD_LOGIC := '0';                      --'1' for multi-code commands, '0' for single code commands
-  SIGNAL caps_lock         : STD_LOGIC := '0';                      --'1' if caps lock is active, '0' if caps lock is inactive
-  SIGNAL control_r         : STD_LOGIC := '0';                      --'1' if right control key is held down, else '0'
-  SIGNAL control_l         : STD_LOGIC := '0';                      --'1' if left control key is held down, else '0'
-  SIGNAL shift_r           : STD_LOGIC := '0';                      --'1' if right shift is held down, else '0'
-  SIGNAL shift_l           : STD_LOGIC := '0';                      --'1' if left shift is held down, else '0'
-  SIGNAL ascii             : STD_LOGIC_VECTOR(7 DOWNTO 0) := x"FF"; --internal value of ASCII translation
-  SIGNAL keyboard_sig      : STD_LOGIC := '0'; -- Pulse signal from keyboard to UART_TX
+--  SIGNAL ascii             : STD_LOGIC_VECTOR(7 DOWNTO 0) := x"FF"; --internal value of ASCII translation
+  SIGNAL keyboard_sig      : STD_LOGIC := '0'; -- Pulse signal from keyboard to UART_TX 
+ 
+  --SIGNAL dataIn            : STD_LOGIC_VECTOR(15 DOWNTO 0); --DATA IN to 7-seg 
+  SIGNAL dataInLUT         : STD_LOGIC_VECTOR(7 DOWNTO 0);  --Data sent from Rx 
+  SIGNAL dataOutLUT        : STD_LOGIC_VECTOR(15 DOWNTO 0);  
+  SIGNAL firstline         : STD_LOGIC_VECTOR(127 downto 0);
+  SIGNAL secondline        : STD_LOGIC_VECTOR(127 downto 0);
+  SIGNAL o_RX_DV           : std_logic; 
+  SIGNAL DatainLCD         : std_LOGIC_VECTOR(15 downto 0); 
 
   --declare PS2 keyboard interface component
   COMPONENT ps2_keyboard IS
@@ -59,27 +68,125 @@ ARCHITECTURE behavior OF top_level IS
     o_TX_Done   : out std_logic
     );
 end COMPONENT;
+
+
+Component UART_RX is
+  generic (
+    g_CLKS_PER_BIT : integer := 5208     -- Needs to be set correctly
+    );
+  port (
+    i_Clk       : in  std_logic;
+    i_RX_Serial : in  std_logic;
+    o_RX_DV     : out std_logic;
+    o_RX_Byte   : out std_logic_vector(7 downto 0)
+    );
+end Component;
+
+Component ASCIITo7SegLUT is
+   port(
+		asciiData : in std_logic_vector(7 downto 0);
+		oSevenSegmentData : out std_logic_vector(15 downto 0)
+   );
+end Component;
+
+Component I2C_user_logic_7seg is							-- Modified from SPI usr logic from last year
+    Port ( iclk : in STD_LOGIC;
+           dataIn : in STD_LOGIC_VECTOR (15 downto 0);
+           oSDA : inout STD_LOGIC;
+           oSCL : inout STD_LOGIC);
+end Component;
+
+
+Component LCD_Controller is							-- Modified from SPI usr logic from last year
+    Port ( iclk : in STD_LOGIC;
+			  Rx_data_valid : std_logic; 
+           dataIn : in STD_LOGIC_VECTOR (7 downto 0);
+			  FirstLineInput: out std_LOGIC_VECTOR(127 downto 0);
+			  SecondLineInput: out std_LOGIC_VECTOR(127 downto 0)
+			  );
+end Component;
+
+
+Component LCDI2C_user_logic is							-- Modified from SPI usr logic from last year
+    Port ( iclk : in STD_LOGIC;
+           dataIn : in STD_LOGIC_VECTOR (15 downto 0);
+			  FirstLineInput: in std_LOGIC_VECTOR(127 downto 0);
+			  SecondLineInput: in std_LOGIC_VECTOR(127 downto 0);
+           oLCDSDA : inout STD_LOGIC;
+           oLCDSCL : inout STD_LOGIC
+			  );
+end Component;
  
 BEGIN
+
+  datainLCD <= "00000000" & dataInLUT; 
 
   --instantiate PS2 keyboard interface logic
   ps2_keyboard_0:  ps2_keyboard
     GENERIC MAP(clk_freq => clk_freq, debounce_counter_size => ps2_debounce_counter_size)
-    PORT MAP(clk => clk, ps2_clk => ps2_clk, ps2_data => ps2_data, ps2_code_new => ps2_code_new, ps2_code => ps2_code); 
+    PORT MAP(clk => clk, 
+				ps2_clk => ps2_clk, 
+				ps2_data => ps2_data, 
+				ps2_code_new => ps2_code_new, 
+				ps2_code => ps2_code); 
 	 
-	 inst_UART_TX : UART_TX 
+inst_UART_TX : UART_TX 
   generic map(
     g_CLKS_PER_BIT => 5208     -- Needs to be set correctly
     )
   port map (
     i_Clk => clk,      
-    i_TX_DV => ps2_clk,   
-    i_TX_Byte => ps2_code,  
+    i_TX_DV => keyboard_sig,   
+    i_TX_Byte => ascii,  
     o_TX_Active => o_TX_Active,
     o_TX_Serial => o_TX_Serial,
     o_TX_Done   => o_TX_Done
     );
 
+	 
+inst_UART_RX : UART_RX
+  generic map(
+    g_CLKS_PER_BIT => 5208      -- Needs to be set correctly
+    )
+  port map(
+    i_Clk       => clk, 
+    i_RX_Serial => i_RX_Serial,  
+    o_RX_DV     => o_RX_DV,  
+    o_RX_Byte   => dataInLUT  
+    );
+
+inst_ASCIITo7SegLUT : ASCIITo7SegLUT
+   port map(
+		asciiData => dataInLUT, 
+		oSevenSegmentData => DataOutLUT
+   );
+
+	
+inst_I2C_USER : I2C_user_logic_7seg 							-- Modified from SPI usr logic from last year
+    Port map( iclk   => clk,
+           dataIn => DataOutLUT, -- Probably fix later 
+           oSDA   => oSDA,
+           oSCL   => oSCL
+			  );
+
+isnt_LCD_Controller: LCD_Controller 							-- Modified from SPI usr logic from last year
+    Port map ( iclk => clk,
+			  Rx_data_valid => o_RX_DV,
+           dataIn => dataInLUT,
+			  FirstLineInput => firstline,
+			  SecondLineInput => secondline
+			  );		  
+			  
+			  
+			 
+inst_LCD_user : LCDI2C_user_logic 							-- Modified from SPI usr logic from last year
+    Port map( iclk         => clk,
+           dataIn          => datainLCD,
+			  FirstLineInput  => firstline,
+			  SecondLineInput => secondline,
+          oLCDSDA         => oLCDSDA,       
+          oLCDSCL         => oLCDSCL
+			  );			  
 
   PROCESS(clk)
   BEGIN
@@ -114,82 +221,7 @@ BEGIN
             break <= '0';    --reset break flag
             e0_code <= '0';  --reset multi-code command flag
             
-            --handle codes for control, shift, and caps lock
-            CASE ps2_code IS
-              WHEN x"58" =>                   --caps lock code
-                IF(break = '0') THEN            --if make command
-                  caps_lock <= NOT caps_lock;     --toggle caps lock
-                END IF;
-              WHEN x"14" =>                   --code for the control keys
-                IF(e0_code = '1') THEN          --code for right control
-                  control_r <= NOT break;         --update right control flag
-                ELSE                            --code for left control
-                  control_l <= NOT break;         --update left control flag
-                END IF;
-              WHEN x"12" =>                   --left shift code
-                shift_l <= NOT break;           --update left shift flag
-              WHEN x"59" =>                   --right shift code
-                shift_r <= NOT break;           --update right shift flag
-              WHEN OTHERS => NULL;
-            END CASE;
-        
-            --translate control codes (these do not depend on shift or caps lock)
-            IF(control_l = '1' OR control_r = '1') THEN
-              CASE ps2_code IS
-                WHEN x"1E" => ascii <= x"00"; --^@  NUL
-                WHEN x"1C" => ascii <= x"01"; --^A  SOH
-                WHEN x"32" => ascii <= x"02"; --^B  STX
-                WHEN x"21" => ascii <= x"03"; --^C  ETX
-                WHEN x"23" => ascii <= x"04"; --^D  EOT
-                WHEN x"24" => ascii <= x"05"; --^E  ENQ
-                WHEN x"2B" => ascii <= x"06"; --^F  ACK
-                WHEN x"34" => ascii <= x"07"; --^G  BEL
-                WHEN x"33" => ascii <= x"08"; --^H  BS
-                WHEN x"43" => ascii <= x"09"; --^I  HT
-                WHEN x"3B" => ascii <= x"0A"; --^J  LF
-                WHEN x"42" => ascii <= x"0B"; --^K  VT
-                WHEN x"4B" => ascii <= x"0C"; --^L  FF
-                WHEN x"3A" => ascii <= x"0D"; --^M  CR
-                WHEN x"31" => ascii <= x"0E"; --^N  SO
-                WHEN x"44" => ascii <= x"0F"; --^O  SI
-                WHEN x"4D" => ascii <= x"10"; --^P  DLE
-                WHEN x"15" => ascii <= x"11"; --^Q  DC1
-                WHEN x"2D" => ascii <= x"12"; --^R  DC2
-                WHEN x"1B" => ascii <= x"13"; --^S  DC3
-                WHEN x"2C" => ascii <= x"14"; --^T  DC4
-                WHEN x"3C" => ascii <= x"15"; --^U  NAK
-                WHEN x"2A" => ascii <= x"16"; --^V  SYN
-                WHEN x"1D" => ascii <= x"17"; --^W  ETB
-                WHEN x"22" => ascii <= x"18"; --^X  CAN
-                WHEN x"35" => ascii <= x"19"; --^Y  EM
-                WHEN x"1A" => ascii <= x"1A"; --^Z  SUB
-                WHEN x"54" => ascii <= x"1B"; --^[  ESC
-                WHEN x"5D" => ascii <= x"1C"; --^\  FS
-                WHEN x"5B" => ascii <= x"1D"; --^]  GS
-                WHEN x"36" => ascii <= x"1E"; --^^  RS
-                WHEN x"4E" => ascii <= x"1F"; --^_  US
-                WHEN x"4A" => ascii <= x"7F"; --^?  DEL
-                WHEN OTHERS => NULL;
-              END CASE;
-            ELSE --if control keys are not pressed  
-            
-              --translate characters that do not depend on shift, or caps lock
-              CASE ps2_code IS
-                WHEN x"29" => ascii <= x"20"; --space
-                WHEN x"66" => ascii <= x"08"; --backspace (BS control code)
-                WHEN x"0D" => ascii <= x"09"; --tab (HT control code)
-                WHEN x"5A" => ascii <= x"0D"; --enter (CR control code)
-                WHEN x"76" => ascii <= x"1B"; --escape (ESC control code)
-                WHEN x"71" => 
-                  IF(e0_code = '1') THEN      --ps2 code for delete is a multi-key code
-                    ascii <= x"7F";             --delete
-                  END IF;
-                WHEN OTHERS => NULL;
-              END CASE;
-              
-              --translate letters (these depend on both shift and caps lock)
-              IF((shift_r = '0' AND shift_l = '0' AND caps_lock = '0') OR
-                ((shift_r = '1' OR shift_l = '1') AND caps_lock = '1')) THEN  --letter is lowercase
+--         
                 CASE ps2_code IS              
                   WHEN x"1C" => ascii <= x"61"; --a
                   WHEN x"32" => ascii <= x"62"; --b
@@ -219,92 +251,6 @@ BEGIN
                   WHEN x"1A" => ascii <= x"7A"; --z
                   WHEN OTHERS => NULL;
                 END CASE;
-              ELSE                                     --letter is uppercase
-                CASE ps2_code IS            
-                  WHEN x"1C" => ascii <= x"41"; --A
-                  WHEN x"32" => ascii <= x"42"; --B
-                  WHEN x"21" => ascii <= x"43"; --C
-                  WHEN x"23" => ascii <= x"44"; --D
-                  WHEN x"24" => ascii <= x"45"; --E
-                  WHEN x"2B" => ascii <= x"46"; --F
-                  WHEN x"34" => ascii <= x"47"; --G
-                  WHEN x"33" => ascii <= x"48"; --H
-                  WHEN x"43" => ascii <= x"49"; --I
-                  WHEN x"3B" => ascii <= x"4A"; --J
-                  WHEN x"42" => ascii <= x"4B"; --K
-                  WHEN x"4B" => ascii <= x"4C"; --L
-                  WHEN x"3A" => ascii <= x"4D"; --M
-                  WHEN x"31" => ascii <= x"4E"; --N
-                  WHEN x"44" => ascii <= x"4F"; --O
-                  WHEN x"4D" => ascii <= x"50"; --P
-                  WHEN x"15" => ascii <= x"51"; --Q
-                  WHEN x"2D" => ascii <= x"52"; --R
-                  WHEN x"1B" => ascii <= x"53"; --S
-                  WHEN x"2C" => ascii <= x"54"; --T
-                  WHEN x"3C" => ascii <= x"55"; --U
-                  WHEN x"2A" => ascii <= x"56"; --V
-                  WHEN x"1D" => ascii <= x"57"; --W
-                  WHEN x"22" => ascii <= x"58"; --X
-                  WHEN x"35" => ascii <= x"59"; --Y
-                  WHEN x"1A" => ascii <= x"5A"; --Z
-                  WHEN OTHERS => NULL;
-                END CASE;
-              END IF;
-              
-              --translate numbers and symbols (these depend on shift but not caps lock)
-              IF(shift_l = '1' OR shift_r = '1') THEN  --key's secondary character is desired
-                CASE ps2_code IS              
-                  WHEN x"16" => ascii <= x"21"; --!
-                  WHEN x"52" => ascii <= x"22"; --"
-                  WHEN x"26" => ascii <= x"23"; --#
-                  WHEN x"25" => ascii <= x"24"; --$
-                  WHEN x"2E" => ascii <= x"25"; --%
-                  WHEN x"3D" => ascii <= x"26"; --&              
-                  WHEN x"46" => ascii <= x"28"; --(
-                  WHEN x"45" => ascii <= x"29"; --)
-                  WHEN x"3E" => ascii <= x"2A"; --*
-                  WHEN x"55" => ascii <= x"2B"; --+
-                  WHEN x"4C" => ascii <= x"3A"; --:
-                  WHEN x"41" => ascii <= x"3C"; --<
-                  WHEN x"49" => ascii <= x"3E"; -->
-                  WHEN x"4A" => ascii <= x"3F"; --?
-                  WHEN x"1E" => ascii <= x"40"; --@
-                  WHEN x"36" => ascii <= x"5E"; --^
-                  WHEN x"4E" => ascii <= x"5F"; --_
-                  WHEN x"54" => ascii <= x"7B"; --{
-                  WHEN x"5D" => ascii <= x"7C"; --|
-                  WHEN x"5B" => ascii <= x"7D"; --}
-                  WHEN x"0E" => ascii <= x"7E"; --~
-                  WHEN OTHERS => NULL;
-                END CASE;
-              ELSE                                     --key's primary character is desired
-                CASE ps2_code IS  
-                  WHEN x"45" => ascii <= x"30"; --0
-                  WHEN x"16" => ascii <= x"31"; --1
-                  WHEN x"1E" => ascii <= x"32"; --2
-                  WHEN x"26" => ascii <= x"33"; --3
-                  WHEN x"25" => ascii <= x"34"; --4
-                  WHEN x"2E" => ascii <= x"35"; --5
-                  WHEN x"36" => ascii <= x"36"; --6
-                  WHEN x"3D" => ascii <= x"37"; --7
-                  WHEN x"3E" => ascii <= x"38"; --8
-                  WHEN x"46" => ascii <= x"39"; --9
-                  WHEN x"52" => ascii <= x"27"; --'
-                  WHEN x"41" => ascii <= x"2C"; --,
-                  WHEN x"4E" => ascii <= x"2D"; ---
-                  WHEN x"49" => ascii <= x"2E"; --.
-                  WHEN x"4A" => ascii <= x"2F"; --/
-                  WHEN x"4C" => ascii <= x"3B"; --;
-                  WHEN x"55" => ascii <= x"3D"; --=
-                  WHEN x"54" => ascii <= x"5B"; --[
-                  WHEN x"5D" => ascii <= x"5C"; --\
-                  WHEN x"5B" => ascii <= x"5D"; --]
-                  WHEN x"0E" => ascii <= x"60"; --`
-                  WHEN OTHERS => NULL;
-                END CASE;
-              END IF;
-              
-            END IF;
           
           IF(break = '0') THEN  --the code is a make
             state <= output;      --proceed to output state
@@ -324,13 +270,14 @@ BEGIN
     END IF;
   END PROCESS;
  
-process(clk)
+process(break)
 begin 
-if (clk = '1' and ascii_new = '1') then 
-  keyboard_sig <= '1'; 
+if break = '1' then 
+  keyboard_sig <= '1';  
 else 
   keyboard_sig <= '0';
 end if; 
+
 end process;
 
 END behavior;
